@@ -1,0 +1,26 @@
+{
+    "id": "E2D73A60",
+    "path": "~/analises-pegabot/#LulaPresidente13/rmarkdown/scripts/analise.R",
+    "project_path": null,
+    "type": "r_source",
+    "hash": "1328118402",
+    "contents": "",
+    "dirty": false,
+    "created": 1661255313219.0,
+    "source_on_save": false,
+    "relative_order": 2,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "10,53",
+        "scrollLine": "0"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1661255722,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1661255722143,
+    "read_only": false,
+    "read_only_alternatives": []
+}

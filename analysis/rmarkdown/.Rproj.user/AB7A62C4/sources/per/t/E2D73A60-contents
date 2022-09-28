@@ -1,0 +1,298 @@
+# Initial config -  Always execute
+source('../initialConfig.R')
+library(kableExtra)
+library(scales)
+library(knitr)
+# 0. Leitura da base #####
+hashtag <- '#LulaPresidente13'
+
+# Leitura dos resultados do pegabot
+base_pegabot <- read_csv("dados/resultado_#LulaPresidente13.csv",
+                         col_types = cols(`Mensagem de Erro` = col_character(),
+                                          `Criação da conta` = col_character()))
+base_pegabot$`Perfil Twitter` <- tolower(base_pegabot$`Perfil Twitter`)
+base_pegabot$id <- seq(1:nrow(base_pegabot))
+
+# Leitura da base twint
+base_twint <- read_csv("dados/alltweets_2022-08-15 00:00:00_1660739157.csv",
+                       col_types = cols(.default = "c"))
+
+# Ajustes no username de base_twint
+# to lower e com @
+base_twint$username_original <- base_twint$username
+base_twint$username <- paste0(tolower(base_twint$username))
+
+# Analises ----------------------------------------------------------------
+
+## 0. Filtrar bots #####
+
+# Porcentagem de 70%+ na lista da hashtag
+
+base_pegabot <- base_pegabot %>% # Separando a base
+   mutate(Resultado = cut(x = `Análise Total`,
+                          breaks = c(0,70, Inf),
+                          labels = c("Baixa probabilidade de existência de comportamento automatizado",
+                                     "Probabilidade de existência de comportamento automatizado")))
+
+bots <- base_pegabot %>%
+   filter(Resultado == "Probabilidade de existência de comportamento automatizado") %>%
+   distinct(`Perfil Twitter`)
+
+# Filtrar tweets de bots
+bots_twint <- base_twint[tolower(base_twint$username) %in% tolower(bots$`Perfil Twitter`),]
+
+## 1. Stats #####
+
+# Perfis com msg de erro 
+# Essa msg não existe na base do pegabot para execuções feitas localmente
+msg_erro <- base_pegabot %>% 
+   distinct(`Perfil Twitter`, `Mensagem de Erro`) %>% 
+   group_by(`Mensagem de Erro`) %>% 
+   summarise(Total = n()); msg_erro
+ 
+DT::datatable(msg_erro, rownames = FALSE)
+# 
+nerros <- msg_erro %>%
+   filter(!is.na(`Mensagem de Erro`)) %>%
+   select(Total) %>%
+   summarise(total = sum(Total))
+
+# Números gerais
+ntweets_analisados <- length(unique(base_twint$id)); ntweets_analisados
+nperfis_analisados <- length(unique(base_pegabot$`Perfil Twitter`, incomparables = NA)); nperfis_analisados
+nperfis_analisados_twint <- length(unique(base_twint$user_id)); nperfis_analisados_twint
+percent_perfis_analisados_twint <- percent(nperfis_analisados/nperfis_analisados_twint, 0.1); percent_perfis_analisados_twint
+percent_erros <- percent(nerros$total/nperfis_analisados, 0.1); percent_erros
+primeiro_dia <- min(base_twint$date); primeiro_dia
+ultimo_dia <- max(base_twint$date); ultimo_dia
+
+nbots <- length(unique(bots$`Perfil Twitter`)); nbots
+nbots_twint <- length(unique(bots_twint$username)); nbots_twint
+percent_bots <- percent(nbots/nperfis_analisados, 0.1); percent_bots
+percent_bots_twint <- percent(nbots_twint/nperfis_analisados_twint, 0.1); percent_bots_twint
+nposts_bots <- nrow(bots_twint); nposts_bots
+percent_posts_bots <- percent(nposts_bots/ntweets_analisados, 0.1); percent_posts_bots
+total_horas <- round(as.numeric(difftime(ultimo_dia, primeiro_dia, units = "h")),); total_horas
+
+## 2. Analise Temporal #####
+
+# Adicionar intervalo de 10 min
+base_twint$intervalo_10min <- cut(as.POSIXct(base_twint$date), breaks = "10 min",) 
+# Adicionar intervalo de 5 min
+base_twint$intervalo_5min <- cut(as.POSIXct(base_twint$date), breaks = "5 min") 
+# Tabela de frequência por intervalo
+ft_temporal <- plyr::count(base_twint, 'intervalo_10min')
+ft_temporal$intervalo <- format(strptime(ft_temporal$intervalo_10min,
+                                         "%Y-%m-%d %H:%M:%S"),
+                                format = "%H:%M")
+# Plot
+plot_analise_temporal <- ggplot(ft_temporal, aes(x = fct_inorder(intervalo, intervalo_10min), y = freq)) +
+  geom_line(group = 1, color = paleta_its[2]) +
+  labs(title = "Evolução do compartilhamento dos tweets",
+       subtitle = paste0("que mencionam ", hashtag),
+       x = "",
+       y = "") +
+  scale_x_discrete(guide = guide_axis(check.overlap = TRUE),
+                   breaks = ft_temporal$intervalo[seq(1, 161, by = 10)]) +
+  theme_minimal() +
+  scale_y_continuous(breaks = seq(0, max(ft_temporal$freq) + 200, 200),
+                     name = "Nº de tweets") +
+  theme(plot.title = element_text(size = 13),
+        plot.subtitle = element_text(size = 12),
+        axis.text.x = element_text(angle = 0, size = 11),
+        axis.text.y = element_text(size = 12),
+        plot.margin = unit(c(.5,2,.5,1),"cm"),
+        axis.title.y = element_text(size = 13, vjust = 2, 
+                                    hjust = 0.98,
+                                    colour = paleta_its[7]),
+        #panel.grid.major.x = element_blank(),
+        #panel.grid.minor.x = element_blank(),
+        #panel.grid.major.y = element_blank(),
+        panel.grid.minor.y = element_blank())
+
+# Análise dos picos de compartilhamento
+picos <- ft_temporal %>%
+  arrange(-freq) %>%
+  head(15)
+
+filter_timeline_pico <- base_twint %>%
+  filter(intervalo_10min %in% picos$intervalo_10min)
+
+# Checar qual foi o intervalo com maior número de compartilhamentos
+colnames(ft_temporal)[2] <- 'n'
+max_compartilhamento <- ft_temporal[ft_temporal$n == max(ft_temporal$n),]; max_compartilhamento
+
+# Filtrar a base_twint para coletar registros que estão DENTRO intervalo anterior
+filter_timeline <- base_twint[which(base_twint$intervalo_10min == max_compartilhamento$intervalo_10min),]
+
+# Quantos desses registros filtrados são RTs e tweets
+rt_max_compartilhamento <- nrow(filter_timeline[filter_timeline$retweet == 'True',]); rt_max_compartilhamento
+tweets_max_compartilhamento <- nrow(filter_timeline[filter_timeline$retweet == 'False',]); tweets_max_compartilhamento
+
+aux_twint <- base_twint
+max_intervalo_full <- as.character(max_compartilhamento$intervalo_10min)
+filter_timeline_atemax <- subset(aux_twint, date <= intervalo_10min); nrow(filter_timeline_atemax)
+
+# Porcentagem de registros até o intervalo do pico (incluindo o pico)
+# Com a porcentagem do que é tweet e RT até esse pico
+porc_total_atemax <- (nrow(filter_timeline_atemax)/ntweets_analisados)*100; porc_total_atemax
+retweets_atemax <- nrow(filter_timeline_atemax[filter_timeline_atemax$retweet == 'True',]); retweets_atemax
+tweets_atemax <- nrow(filter_timeline_atemax[filter_timeline_atemax$retweet == 'False',]); tweets_atemax
+percent_rts_atemax <- (retweets_atemax/ntweets_analisados)*100; round(percent_rts_atemax,1);
+percent_tweets_atemax <- (tweets_atemax/ntweets_analisados)*100; round(percent_tweets_atemax,1); 
+
+## 6. Análise da distribuição dos tweets ####
+
+# Verificar o desvio padrão, média e mediana dos registros 
+
+# Agrupar qntd de tweets por usuário
+total_tweets_user <- base_twint %>% 
+  group_by(user_id) %>% 
+  summarise(n = n()) 
+
+# Estatísticas
+sd_tweets <- round(sd(total_tweets_user$n),1); sd_tweets
+mean_tweets <- round(mean(total_tweets_user$n),1); mean_tweets
+median_tweets <- round(median(total_tweets_user$n),1); median_tweets
+
+# Qtd de usuários por número de publicações
+users_per_ntweets <- base_twint %>% 
+  group_by(username) %>% 
+  summarise(n = n())  %>%
+  count(total_tweets = n, sort = TRUE) %>%
+  mutate(percent = percent(n/nperfis_analisados_twint, 1))
+
+users_per_ntweets_mean <- percent(sum(users_per_ntweets$n[1:round(mean_tweets)])/nperfis_analisados_twint)
+
+# Verificar usuários com alta frequência de tweets
+# Agrupar pelo usuário e contar o total de tweets realizados
+# filtrar os usuários que tem uma frequência de tweets maior que um valor x (desvio padrão)
+total_tweets_altafreq <- base_twint %>% 
+  group_by(username) %>% 
+  summarise(n = n()) %>% 
+  filter(n >= mean_tweets) %>%
+  arrange(desc(n))
+
+# Porcentagem dos usuários com alta frequência de tweets em relação ao total de usuários únicos 
+# presentes na base do twint
+nrow(total_tweets_altafreq)
+usuarios_alta_freq <- percent(nrow(total_tweets_altafreq)/nperfis_analisados_twint, accuracy = 0.1); usuarios_alta_freq
+
+# Quantidade total de tweets postados por usuários com alta frequência -- sum(total_tweets_freq80$n)
+# em relação à quantidade total de tweets coletados -- ntweets_analisados
+# Isso vai dar uma ideia do volume de tweets que poucos usuarios publicam em relação ao total de tweets.
+sum(total_tweets_altafreq$n)
+alta_atividade <- percent(sum(total_tweets_altafreq$n)/ntweets_analisados, accuracy = 0.1); alta_atividade
+
+# Plot
+plot_altafreq <- ggplot(total_tweets_altafreq, aes(x = n)) + 
+  geom_histogram(fill = paleta_its[2]) +
+  #geom_bar(stat = "identity", fill = paleta_its[1]) +
+  stat_bin(geom='text', aes(label = ifelse(..count.. > 0, ..count.., "")), 
+           vjust = -.5, size = 3) +
+  labs(title = "Distribuição da quantidade de usuários com maior atividade",
+       subtitle = expression(
+         paste("considerando ", bold("todos os usuários"), 
+               " que publicaram no mínimo ", bold("2 tweets"))),
+       y = "Nº de usuários",
+       x = "Nº de tweets compartilhados") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 13),
+        plot.subtitle = element_text(size = 12),
+        axis.text.x = element_text(angle = 0, size = 11),
+        axis.text.y = element_text(size = 11),
+        plot.margin = unit(c(.5,2,.5,1),"cm"),
+        axis.title.y = element_text(size = 13, vjust = 2, 
+                                    hjust = 0.98, colour = paleta_its[7]),
+        axis.title.x = element_text(size = 13, vjust = 2, 
+                                    hjust = 0, colour = paleta_its[7]),
+        #panel.grid.major.x = element_blank(),
+        #panel.grid.minor.x = element_blank(),
+        #panel.grid.major.y = element_blank(),
+        panel.grid.minor.y = element_blank())
+  #+
+#scale_x_continuous(breaks = seq(0, 150, 20), lim = c(0, 150))
+
+# O que é tweet e retweet desses usuários com alta frequência
+# Filtrar a base para pegar apenas regsitros desses usuários 
+subset_alta_freq <- base_twint[base_twint$username %in% total_tweets_altafreq$username,]
+retweets_altafreq <- nrow(subset_alta_freq[subset_alta_freq$retweet == 'True',])
+tweets_altafreq <- nrow(subset_alta_freq[subset_alta_freq$retweet == 'False',])
+
+# Porcentagem em relação ao total de registros da base_twint
+percent_rts_alta <- (retweets_altafreq/ntweets_analisados)*100; round(percent_rts_alta,1); percent_rts_alta
+percent_tweets_alta <- (tweets_altafreq/ntweets_analisados)*100; round(percent_tweets_alta,1); percent_tweets_alta
+
+# O que é tweet e retweet de TODA a base de dados
+nretweets <- nrow(base_twint[base_twint$retweet == 'True',]); nretweets
+ntweets <- nrow(base_twint[base_twint$retweet == 'False',]); ntweets
+percent_rts <- percent(nretweets/ntweets_analisados, 0.1); percent_rts
+percent_tweets <- percent(ntweets/ntweets_analisados, 0.1); percent_tweets
+
+# Plot
+parts <- c(`RT` = nretweets, `Tweets` = ntweets)
+plot_tweet_rts <- waffle(title = 'Proporção de tweets e RTs compartilhados pelos usuários',
+       parts / 1000, rows = 4,
+       colors = c(paleta_its[2], paleta_its[6]),
+       xlab = 'cada unidade = 1000 registros'
+)
+
+## 9. Outras hashtags #####
+
+base_twint <- base_twint %>% ungroup
+
+hashtags <- unnest_tokens(base_twint, h, 'hashtags') %>%
+  #filter(h != 'ninguemmexecomernesto') %>%
+  count(h, sort = T)
+hashtags_filtered <- hashtags[4:60,]
+hashtags_filtered <- hashtags_filtered[-3,]
+
+plot_nuvem <- ggplot(hashtags[2:20,], aes(label = h, size = n,  color = n)) +
+  geom_text_wordcloud_area(rm_outside = TRUE, shape = 'circle') +
+  scale_size_area(max_size = 18) +
+  theme_minimal() +
+  scale_color_gradient(low = paleta_its[3], high = paleta_its[1]) +
+  theme(plot.margin=grid::unit(c(0,0,0,0), "mm"))
+
+
+## 10. RTs mais comuns em toda a base ####
+
+populares_retweets <- base_twint %>%
+  filter(retweet == 'True') %>%
+  group_by(tweet) %>%
+  summarise(n = n())  %>%
+  arrange(desc(n)) %>% 
+  head(10)
+
+populares_retweets[, c('username_fonte', 'link')] <- NA
+
+for(i in 1:nrow(populares_retweets[1:10,])) {
+  username <- gsub('RT @', '', populares_retweets$tweet[i])
+  username <- gsub(':', '', unlist(strsplit(username, " ")))[1]
+  
+  text <- gsub(paste0('RT @', username, ': '), '', populares_retweets$tweet[i])
+  
+  tweets <- base_twint[which(str_detect(base_twint$tweet, substr(text, 1, 60)) == TRUE),]
+  tweets <- tweets[which(tweets$retweet == 'False' & tweets$username == paste0(tolower(username))),]
+  populares_retweets$link[i] <- tweets[which(tolower(tweets$username) == paste0(tolower(username))), 'link']
+  populares_retweets$username_fonte[i] <- paste0('@', username)
+  
+}
+colnames(populares_retweets[,c(4,3,2)]) <- c('Autor', 'Link', 'Retweets')
+DT::datatable(populares_retweets[,c(3,4,2)], rownames = FALSE, colnames = c('Autor', 'Link', 'Total RTs'))
+
+# Total
+total_populares_rts <- sum(populares_retweets$n)
+# Porcentagem em relação ao total de registros
+percent(total_populares_rts/ntweets_analisados)
+
+## 14. Qntd posts por min, agrupado por usuário #####
+freq_usuarios <- base_twint %>%
+  count(username, intervalo_5min) %>%
+  arrange(username, intervalo_5min) %>%
+  arrange(-n)
+
+volume_5min <- base_twint %>%
+  filter(username == freq_usuarios$username[2]) %>%
+  filter(intervalo_5min == freq_usuarios$intervalo_5min[2])
+

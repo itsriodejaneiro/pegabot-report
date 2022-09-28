@@ -1,0 +1,57 @@
+---
+title: "Análise de #LulaCovarde"
+author: Democracia e Tecnologia | ITS Rio
+date: 22 de setembro de 2022 <br/> <br/> ![](imgs/ITSblack.png){width=1in} 
+output:
+  prettydoc::html_pretty:
+    css: ["metropolis", "tamu-fonts", "scripts/layout.css"]
+    toc: true
+    theme: leonids
+    highlight: github
+---
+
+```{r message = FALSE, warning = FALSE, paged.print = FALSE, echo = F,  error = F}
+source("scripts/analise.R", encoding = "utf-8")
+```
+
+> Destacamos que, assim como qualquer ferramenta de detecção de comportamento automatizado, o Pegabot tem limitações, especialmente, por conta das técnicas utilizadas para automação de perfis no Twitter serem atualizadas com frequência, impedindo que determinadas contas sejam identificadas pelo algoritmo. Da mesma forma, o Pegabot tem passado por um processo constante de avaliação e ajustes, para se manter atualizado frente às novas estratégias adotadas por esses perfis automatizados. Por esse motivo, procuramos não apontar esses perfis de forma direta, mas sim entender o uso de automação de forma mais ampla, identificando comportamentos que fogem do esperado ou observado, além de apontar indícios de ação coordenada por parte dos usuários ao redor de um tema ou hashtag comum.
+
+#### Sobre os dados coletados
+
+Coletamos `r ntweets_analisados` tweets que mencionaram a hashtag `r hashtag` durante o intervalo entre `r format(strptime(primeiro_dia, "%Y-%m-%d %H:%M:%S"), format = "%d/%m (%Hh%M)")` e `r format(strptime(ultimo_dia, "%Y-%m-%d %H:%M:%S"), format = "%d/%m (%Hh%M)")`, totalizando aproximadamente `r total_horas` horas:
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE, fig.height=4, fig.width=8}
+plot_analise_temporal
+```
+
+<mark>Essa hashtag mobilizou um volume relevante de compartilhamentos em um curto espaço de tempo.</mark> Verificamos que `r percent_tweets` dos registros compreendem tweets nativos, enquanto `r percent_rts` são RTs. Além disso, identificamos que `r nperfis_analisados_twint` usuários compartilharam a hashtag pelo menos uma vez.
+
+#### Sobre a frequência de tweets por usuário
+
+O número de publicações que um usuário realiza no Twitter pode variar por uma série de motivos, como a finalidade da conta e número de seguidores, por exemplo. Por isso olhamos para a frequência de postagem por usuários para entender mais sobre o compartillhamento da hashtag. Numa primeira análise, verificamos que a distribuição da quantidade de usuários em relação ao número de tweets que eles publicam é bastante desbalanceada. `r users_per_ntweets_mean` dos `r nperfis_analisados_twint` usuários contidos na base de dados coletada só fazem menção à hashtag até no máximo `r round(mean_tweets)` vezes, valor de média de tweets por usuário.
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE, fig.height=5, fig.width=9}
+plot_altafreq
+```
+
+Verificamos que `r usuarios_alta_freq` dos usuários publicaram um volume de `r alta_atividade` tweets. Como podemos observar no gráfico, alguns usuários chegaram a compartilhar tweets e RTs mais de 200 vezes. <mark>Um deles chegou a realizar `r total_tweets_altafreq$n[1]` publicações.</mark>
+
+#### Houve comportamento automatizado?
+
+Selecionamos os usuários que publicaram tweets com uma frequência acima da média, ou seja, que publicaram pelo menos 5 vezes e analisamos sobre a existência de comportamento automatizado entre eles usando o Pegabot. <mark>Dos `r nperfis_analisados` usuários analisados, `r nbots`, ou seja `r percent_bots`, apresentaram probabilidade de comportamento automatizado</mark> com valor igual ou maior a 70%. Juntos, esses usuários foram <mark>responsáveis pelo compartilhamento de `r nposts_bots` tweets e RTs,</mark> `r percent_posts_bots` do volume total de tweets coletados.
+
+#### Os tweets que mais repercutiram
+
+Listamos a seguir os 10 tweets que mais receberam RTs. Juntos, esses tweets e os RTs realizados representam um volume de `r percent(total_populares_rts/ntweets_analisados)` das publicações que analisamos aqui. Vale mencionar que <mark>esse volume teve origem em publicações de apenas 4 usuários</mark> e isso é um indicador da relevância deles para o tema envolvendo a hashtag analisada.
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+kbl(populares_retweets[,c(3,4,2)], row.names = FALSE, col.names = c('Autor', 'Link', 'Total RTs')) %>% kable_minimal()
+```
+
+#### Outros temas que apareceram
+
+Algumas hashtags mencionadas juntamente com `r hashtag` são relacionadas ao Lula ou Bolsonaro.
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE, fig.height=4, fig.width=8, fig.align='center'}
+plot_nuvem
+```

@@ -1,0 +1,1 @@
+"0","kbl(populares_retweets[,c(3,4,2)], row.names = FALSE, col.names = c('Autor', 'Link', 'Total RTs')) %>% kable_minimal()"

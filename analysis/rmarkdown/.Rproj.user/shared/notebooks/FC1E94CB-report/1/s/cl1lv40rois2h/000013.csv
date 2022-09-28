@@ -1,0 +1,3 @@
+"0","source(""scripts/analise.R"", encoding = ""utf-8"")"
+"2","Error in library(tidyverse) : there is no package called ‘tidyverse’
+"

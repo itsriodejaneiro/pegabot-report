@@ -1,0 +1,4 @@
+"0","source(""scripts/analise.R"", encoding = ""utf-8"")"
+"2","Error in file(filename, ""r"", encoding = encoding) : 
+  não é possível abrir a conexão
+"
